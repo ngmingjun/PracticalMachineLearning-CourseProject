@@ -1,0 +1,114 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Ming Jun"
+date: "8/19/2020"
+output: html_document
+---
+## Introduction
+The following project was written up in RStudio with the knitr package, to be published into a html document. The goal of this project is to predict the manner in which 6 participants conducted 5 exercises. The "classe" variable in the training set will be used as the outcome of our prediction models. This report will detail how the model was built, how cross validation was used, what the expected out of sample error is, and the appropriate model for our predictions. The prediction model will then be used to predict 20 different test cases in the testing dataset. 
+  
+## Overview
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, the goal will be to use data from accelerometers on the belt, forearm, arm, and dumbbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+
+The [training](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv}) and [testing](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv) datasets were acquired from http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Cleaning and Processing the Datasets
+The data is firstly downloaded and loaded into the R environment. 
+```{r echo = TRUE}
+trainSet_url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testSet_url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+### Load training and testing datasets
+trainSet <- read.csv("./pml-training.csv")
+testSet <- read.csv("./pml-testing.csv")
+```
+The dimensions of the training and testing datasets are explored. Next, we clean the datasets by removing covariates that consist mostly of NAs and have near zero variance.
+```{r echo = TRUE, message = FALSE}
+dim(trainSet)
+dim(testSet)
+### Convert Classe to factor variable
+trainSet$classe <- as.factor(trainSet$classe)
+
+### Remove columns of covariates that consist of mostly NAs
+trainData <- trainSet[,colSums(is.na(trainSet)) == 0]
+testData <- testSet[,colSums(is.na(testSet)) == 0]
+
+### Remove irrelevant columns for prediction purposes
+trainData <- trainData[,-c(1:7)]
+testData <- testData[,-c(1:7)]
+
+### Remove columns of covariates that have near zero variance
+library(caret)
+trainData <- trainData[,-(nearZeroVar(trainData))]
+dim(trainData)
+dim(testData)
+```
+The initial 180 columns in both datasets have been reduced to 53 columns. Next, we separate the training dataset into 70% training set and 30% testing set for the purpose of cross validation. This will be used to test our model and compute the out of sample error rate. 
+```{r echo = TRUE, message = FALSE}
+library(caret)
+set.seed(3450)
+inTrain <- createDataPartition(trainData$classe, p = 0.7, list = FALSE)
+training <- trainData[inTrain,]
+testing <- trainData[-inTrain,]
+dim(training)
+dim(testing)
+```
+
+## Model Building
+To build our prediction model, we will be using the 3 different prediction models which are listed below:  
+
+1. Random Forest  
+2. Boosted Trees  
+3. Linear Discriminant Analysis  
+
+A confusion matrix will be used to determine the accuracy of each type of prediction model.  
+  
+### Random Forest
+```{r echo = TRUE, message = FALSE, cache = TRUE}
+set.seed(3450)
+### trControl modified to shorten processing times
+rfFit <- train(classe ~ ., data = training, method = "rf", 
+                trControl = trainControl(method = "repeatedcv", number = 3, 
+                                         repeats = 5))
+rfPred <- predict(rfFit, newdata = testing)
+confusionMatrix(rfPred, testing$classe)
+```
+The accuracy of the Random Forest model is 99.35%, which means the expected out of sample error rate is 0.65%.  
+  
+### Boosted Trees
+```{r echo = TRUE, message = FALSE, cache = TRUE}
+set.seed(3450)
+### trControl modified to shorten processing times
+gbmFit <- train(classe ~ ., data = training, method = "gbm", 
+                trControl = trainControl(method = "repeatedcv", number = 3, 
+                                         repeats = 5), 
+                verbose = FALSE)
+gbmPred <- predict(gbmFit, newdata = testing)
+confusionMatrix(gbmPred, testing$classe)
+```
+The accuracy of the Boosted Trees model is 96.5%, which means the expected out of sample error rate is 3.5%.  
+  
+### Linear Discriminant Analysis
+```{r echo = TRUE, message = FALSE, cache = TRUE}
+set.seed(3450)
+### trControl modified to shorten processing times
+ldaFit <- train(classe ~ ., data = training, method = "lda", 
+                trControl = trainControl(method = "repeatedcv", number = 3, 
+                                         repeats = 5))
+ldaPred <- predict(ldaFit, newdata = testing)
+confusionMatrix(ldaPred, testing$classe)
+```
+The accuracy of the Linear Discriminant Analysis model is 71.21%, which means the expected out of sample error rate is 28.79%. 
+
+## Model Selection
+The accuracy of the 3 models are listed below:  
+
+1. Random Forest - 99.35%  
+2. Boosted Trees - 96.50%  
+3. Linear Discriminant Analysis - 71.21%  
+
+After taking the information gathered into consideration, the Random Forest model is selected because it has the highest accuracy among the three models. The model is then applied to the original test set to make 20 predictions.
+```{r echo = TRUE}
+predict(rfFit, testSet)
+```
+The prediction model successfully predicted the correct outcome for all 20 test cases.
